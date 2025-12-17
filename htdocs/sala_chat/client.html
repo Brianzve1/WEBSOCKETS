@@ -1,0 +1,139 @@
+<html>
+<head>
+<title>WebSocket Chat </title>
+<style type="text/css">
+html,body {
+    font: normal 0.9em arial, helvetica;
+}
+#log {
+    width: 600px;
+    height: 300px;
+    border: 1px solid #7F9DB9;
+    overflow: auto;
+    padding: 4px;
+    background: #f9f9f9;
+}
+#msg {
+    width: 400px;
+}
+.status {
+    font-weight: bold;
+}
+</style>
+<script type="text/javascript">
+var socket;
+var nick = "Anónimo";
+var host = "ws://127.0.0.1:9000"; // Cambiar si el server escucha en otro lado
+var reconectando = false;
+
+function init() {
+    // Pedir nick
+    var inputNick = prompt("Ingrese su nick:", "");
+    if (inputNick && inputNick.trim() !== "") {
+        nick = inputNick.trim().substring(0, 20);
+    }
+
+    connect();
+}
+
+function connect() {
+    try {
+        socket = new WebSocket(host);
+        log('Conectando...', "status");
+
+        socket.onopen = function() {
+            log("Conectado ✔ - status " + this.readyState, "status");
+            socket.send(JSON.stringify({type: "setNick", nick: nick}));
+            $("msg").focus();
+        };
+
+        socket.onmessage = function(msg) {
+            try {
+                var data = JSON.parse(msg.data);
+                if (data.type === "message") {
+                    log("[" + data.time + "] " + data.nick + ": " + data.text);
+                } else {
+                    log("Mensaje del servidor: " + msg.data);
+                }
+            } catch(e) {
+                log("Recibido (no JSON): " + msg.data);
+            }
+        };
+
+        socket.onclose = function() {
+            log("Desconectado ❌ - status " + this.readyState, "status");
+            // Reconexión automática si no fue intencional
+            if (!reconectando) {
+                setTimeout(function() {
+                    log("Intentando reconectar...", "status");
+                    connect();
+                }, 2000);
+            }
+        };
+
+        socket.onerror = function(err) {
+            log("Error de conexión: " + err, "status");
+        };
+    } catch (ex) {
+        log("Error al conectar: " + ex, "status");
+    }
+}
+
+function send() {
+    var txt = $("msg");
+    var mensaje = txt.value.trim();
+    if (!mensaje) {
+        alert("El mensaje no puede estar vacío");
+        return;
+    }
+    txt.value = "";
+    txt.focus();
+
+    try {
+        socket.send(JSON.stringify({type: "message", text: mensaje}));
+        log("Tú: " + mensaje);
+    } catch (ex) {
+        log("Error al enviar: " + ex, "status");
+    }
+}
+
+function quit() {
+    if (socket != null) {
+        reconectando = true;
+        log("Desconectando...", "status");
+        socket.close();
+        socket = null;
+        reconectando = false;
+    }
+}
+
+function reconnect() {
+    quit();
+    reconectando = true;
+    log("Reconectando...", "status");
+    setTimeout(function() {
+        connect();
+        reconectando = false;
+    }, 500);
+}
+
+// Utilities
+function $(id) { return document.getElementById(id); }
+function log(msg, tipo) {
+    var clase = tipo ? tipo : "";
+    $("log").innerHTML += "<br><span class='" + clase + "'>" + msg + "</span>";
+    $("log").scrollTop = $("log").scrollHeight;
+}
+function onkey(event) { if (event.keyCode == 13) { send(); } }
+
+</script>
+</head>
+<body onload="init()">
+<h3>WebSocket Chat Mejorado</h3>
+<div id="log"></div>
+<input id="msg" type="text" onkeypress="onkey(event)" placeholder="Escriba su mensaje aquí..."/>
+<button onclick="send()">Enviar</button>
+<button onclick="quit()">Salir</button>
+<button onclick="reconnect()">Reconectar</button>
+</body>
+</html>
